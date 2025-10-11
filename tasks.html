@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Tareas Moderna</title>
+    <link rel="stylesheet" href="./css/styles.css">
+</head>
+<body class="task-body">
+    <div class="task-container">
+        <header class="task-header">
+            <h1 class="main-title">Mis Tareas ✨</h1>
+            <button id="logout-btn" class="btn btn-secondary">Cerrar Sesión</button>
+        </header>
+
+        <div class="card task-creator">
+            <h2 class="card-subtitle">Nueva Tarea</h2>
+            <form id="create-task-form">
+                <div class="form-group">
+                    <label class="form-label" for="task-title">Título</label>
+                    <input class="form-input" id="task-title" type="text" required>
+                </div>
+                <div class="form-group mb-4">
+                    <label class="form-label" for="task-description">Descripción (Opcional)</label>
+                    <textarea class="form-input" id="task-description" rows="2"></textarea>
+                </div>
+                <button type="submit" class="btn btn-primary">
+                    Crear Tarea
+                </button>
+                <p id="creation-message" class="message-box hidden mt-4"></p>
+            </form>
+        </div>
+
+        
+
+        <div class="card task-list-section">
+            <h2 class="card-subtitle">Tareas Pendientes</h2>
+            <div id="tasks-list" class="task-items-container">
+                <p id="loading-message" class="loading-text">Cargando tareas...</p>
+            </div>
+            <p id="list-message" class="message-box hidden mt-4"></p>
+        </div>
+
+        <div class="card task-list-section">
+            <h2 class="card-subtitle completed-title">Tareas Completadas <span class="check-mark">✔️</span></h2>
+            <div id="completed-tasks-list" class="task-items-container">
+                <p id="no-completed-message" class="loading-text">No hay tareas completadas.</p>
+            </div>
+        </div>
+    </div>
+    
+    <div id="edit-modal" class="modal-backdrop hidden">
+        <div class="modal-content modern-card">
+            <h3 class="card-subtitle">Editar Tarea</h3>
+            <form id="edit-task-form">
+                <input type="hidden" id="edit-task-id">
+                <div class="form-group">
+                    <label class="form-label" for="edit-title">Título</label>
+                    <input class="form-input" id="edit-title" type="text" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="edit-description">Descripción</label>
+                    <textarea class="form-input" id="edit-description" rows="3"></textarea>
+                </div>
+                <div class="modal-actions">
+                    <button type="submit" class="btn btn-primary">Guardar Cambios</button>
+                    <button type="button" class="btn btn-secondary" onclick="document.getElementById('edit-modal').classList.add('hidden')">Cancelar</button>
+                </div>
+                <p id="edit-message" class="message-box hidden mt-4"></p>
+            </form>
+        </div>
+    </div>
+    
+    <script>
+    // Base URL del API
+    const API_URL = 'http://localhost:8000/tasks';
+
+    function logout() {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('user_info'); 
+        // Redirigir a la página de login (index.html) localmente
+        window.location.href = 'index.html'; 
+    }
+
+    // 💡 CORRECCIÓN DE FECHA: Función robusta para formatear y manejar 'Invalid Date'
+    function parseDate(dateString) {
+        if (!dateString) return 'Fecha no disponible';
+
+        // Intentar parsear la fecha
+        let dateObj = new Date(dateString);
+
+        // Si es Invalid Date, intentar arreglar el formato (común en backends)
+        if (isNaN(dateObj.getTime())) {
+            // Reemplazar espacio con 'T' para formato ISO compatible
+            let fixedString = dateString.replace(' ', 'T');
+            dateObj = new Date(fixedString);
+            
+            if (isNaN(dateObj.getTime())) {
+                // Si sigue siendo inválida, devolver solo la parte de la fecha si es posible
+                return dateString.split('T')[0].split(' ')[0] || 'Invalid Date';
+            }
+        }
+        
+        // Formato final: DD/MM/AAAA (o el formato local)
+        return dateObj.toLocaleDateString();
+    }
+
+
+    // 🎯 Función para Marcar/Desmarcar Tarea como Completada
+    async function completeTask(taskId, isCompleted) {
+        const token = localStorage.getItem('access_token');
+        const endpoint = `${API_URL}/${taskId}`;
+        // Enviar PATCH con el campo 'completed' que el backend espera
+        const body = { completed: isCompleted };
+
+        try {
+            const response = await fetch(endpoint, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`
+                },
+                body: JSON.stringify(body)
+            });
+
+            if (!response.ok) {
+                // Leer el posible error del servidor
+                const errorData = await response.json().catch(() => ({ message: 'Error desconocido del servidor.' }));
+                throw new Error(errorData.message || `Error en la API: ${response.status}`);
+            }
+
+            document.getElementById('edit-modal').classList.add('hidden');
+            await loadTasks(); 
+        } catch (error) {
+            console.error('Error al completar/desmarcar tarea:', error);
+            alert(`No se pudo ${isCompleted ? 'completar' : 'desmarcar'} la tarea. Detalle: ${error.message}`);
+        }
+    }
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const token = localStorage.getItem('access_token');
+        const tasksList = document.getElementById('tasks-list');
+        const completedTasksList = document.getElementById('completed-tasks-list');
+        const loadingMessage = document.getElementById('loading-message');
+        const editModal = document.getElementById('edit-modal');
+        const editForm = document.getElementById('edit-task-form');
+
+        if (!token) {
+            window.location.href = '/'; 
+            return;
+        }
+
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', logout);
+        }
+
+        // 🔄 Renderizar una sola tarea 
+        function renderTask(task) {
+            const taskItem = document.createElement('div');
+            // Usar la propiedad 'completed' que devuelve la API
+            taskItem.className = `task-item modern-card ${task.completed ? 'completed-task' : 'pending-task'}`; 
+            taskItem.setAttribute('data-id', task.id);
+
+            let actionButtons = '';
+            if (task.completed) {
+                actionButtons = `
+                    <button class="btn btn-secondary complete-btn" data-id="${task.id}" data-completed="false">
+                        Desmarcar
+                    </button>
+                    <button class="btn btn-danger delete-btn" data-id="${task.id}">
+                        Eliminar
+                    </button>
+                `;
+            } else {
+                actionButtons = `
+                    <button class="btn btn-primary btn-complete complete-btn" data-id="${task.id}" data-completed="true">
+                        Completar
+                    </button>
+                    <button class="btn btn-action edit-btn" 
+                        data-id="${task.id}" 
+                        data-title="${task.title}" 
+                        data-description="${task.description || ''}">
+                        Editar
+                    </button>
+                    <button class="btn btn-danger delete-btn" data-id="${task.id}">
+                        Eliminar
+                    </button>
+                `;
+            }
+
+            // --- Fechas (Usando la función corregida parseDate) ---
+            const createdDateStr = parseDate(task.created_at);
+            const completedDateHtml = task.completed && task.completed_at 
+                ? `<span class="task-date-completed">Completada: ${parseDate(task.completed_at)}</span>` 
+                : '';
+
+            taskItem.innerHTML = `
+                <div class="task-content">
+                    <h3 class="task-title">${task.title}</h3>
+                    <p class="task-description">${task.description || 'Sin descripción'}</p>
+                    <div class="task-dates">
+                        <span class="task-date-created">Creada: ${createdDateStr}</span>
+                        ${completedDateHtml}
+                    </div>
+                </div>
+                <div class="task-actions">
+                    ${actionButtons}
+                </div>
+            `;
+            return taskItem;
+        }
+
+        // 🔄 Cargar/Filtrar tareas del backend
+                async function loadTasks(query = '') {
+            loadingMessage.classList.remove('hidden');
+            tasksList.innerHTML = ''; 
+            completedTasksList.innerHTML = ''; 
+
+            try {
+                const response = await fetch(`${API_URL}${query ? '?' + query : ''}`, {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
+                if (response.status === 401) {
+                    alert('Sesión expirada. Por favor, inicie sesión de nuevo.');
+                    logout();
+                    return;
+                }
+
+                // Hacer la función accesible desde el scope global para que funciones
+                // definidas fuera de DOMContentLoaded (p.ej. completeTask) puedan llamarla.
+                window.loadTasks = loadTasks;
+                if (!response.ok) throw new Error('Error al cargar/filtrar tareas');
+
+                const allTasks = await response.json();
+                loadingMessage.classList.add('hidden');
+                
+                const pendingTasks = allTasks.filter(task => !task.completed);
+                const completedTasks = allTasks
+                    .filter(task => task.completed)
+                    .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at)); 
+                
+                if (pendingTasks.length === 0) {
+                    tasksList.innerHTML = '<p class="text-center text-gray-500">No hay tareas pendientes.</p>';
+                } else {
+                    pendingTasks.forEach(task => {
+                        tasksList.appendChild(renderTask(task));
+                    });
+                }
+                
+                if (completedTasks.length === 0) {
+                    completedTasksList.innerHTML = '<p class="text-center text-gray-500">No hay tareas completadas.</p>';
+                } else {
+                    completedTasks.forEach(task => {
+                        completedTasksList.appendChild(renderTask(task));
+                    });
+                }
+
+            } catch (error) {
+                console.error('Error:', error);
+                loadingMessage.classList.add('hidden');
+                tasksList.innerHTML = `<p class="message-box error">No se pudieron cargar las tareas: ${error.message}.</p>`;
+            }
+        }
+        
+        // ❌ Eliminar tarea (funcional)
+        async function deleteTask(taskId) {
+            if (!confirm('¿Estás seguro de que quieres eliminar esta tarea?')) return;
+            try {
+                const response = await fetch(`${API_URL}/${taskId}`, {
+                    method: 'DELETE',
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+                if (!response.ok) throw new Error('Error al eliminar tarea');
+                await loadTasks(); 
+            } catch (error) {
+                console.error('Error:', error);
+                alert('No se pudo eliminar la tarea.');
+            }
+        }
+        
+        // ✏️ Mostrar modal de edición
+        function showEditModal(task) {
+            document.getElementById('edit-task-id').value = task.id;
+            document.getElementById('edit-title').value = task.title;
+            document.getElementById('edit-description').value = task.description;
+            document.getElementById('edit-message').classList.add('hidden'); 
+            editModal.classList.remove('hidden');
+        }
+
+        // 💾 Manejar envío del formulario de edición (PUT)
+        editForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const taskId = document.getElementById('edit-task-id').value;
+            const title = document.getElementById('edit-title').value;
+            const description = document.getElementById('edit-description').value;
+            const messageBox = document.getElementById('edit-message');
+
+            try {
+                const response = await fetch(`${API_URL}/${taskId}`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    // Solo enviamos los campos que se editan
+                    body: JSON.stringify({ title, description }) 
+                });
+
+                if (!response.ok) {
+                    // Leer el error del servidor para debug
+                    const errorData = await response.json().catch(() => ({ message: 'Error desconocido del servidor.' }));
+                    throw new Error(errorData.message || `Error en la API: ${response.status}`);
+                }
+
+                messageBox.textContent = 'Tarea actualizada con éxito. ✅';
+                messageBox.className = 'message-box success mt-4';
+                messageBox.classList.remove('hidden');
+                
+                setTimeout(() => {
+                    editModal.classList.add('hidden');
+                    loadTasks();
+                }, 1000); 
+
+            } catch (error) {
+                console.error('Error al editar tarea:', error);
+                messageBox.textContent = `Error al actualizar la tarea. ❌ Detalle: ${error.message}`;
+                messageBox.className = 'message-box error mt-4';
+                messageBox.classList.remove('hidden');
+            }
+        });
+
+
+        // 🎧 Delegación de eventos para botones de acción
+        [tasksList, completedTasksList].forEach(container => {
+            container.addEventListener('click', (e) => {
+                const target = e.target;
+                
+                if (target.classList.contains('delete-btn')) {
+                    deleteTask(target.getAttribute('data-id'));
+                } else if (target.classList.contains('edit-btn')) {
+                    showEditModal({
+                        id: target.getAttribute('data-id'),
+                        title: target.getAttribute('data-title'),
+                        description: target.getAttribute('data-description')
+                    });
+                } else if (target.classList.contains('complete-btn')) {
+                    const isCompleted = target.getAttribute('data-completed') === 'true';
+                    completeTask(target.getAttribute('data-id'), isCompleted);
+                }
+            });
+        });
+
+        // 📝 Crear nueva tarea (POST) - CORREGIDO
+        document.getElementById('create-task-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const title = document.getElementById('task-title').value;
+            const description = document.getElementById('task-description').value;
+            const messageBox = document.getElementById('creation-message');
+
+                // No enviamos 'created_at' ni 'is_completed' desde el cliente; la BD lo maneja.
+                // Enviamos explícitamente 'completed: false' para mayor claridad.
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ 
+                        title, 
+                        description, 
+                        completed: false
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({ message: 'Error desconocido del servidor.' }));
+                    throw new Error(errorData.message || `Error en la API: ${response.status}`);
+                }
+
+                messageBox.textContent = 'Tarea creada con éxito. ✅';
+                messageBox.className = 'message-box success mt-4';
+                messageBox.classList.remove('hidden');
+
+                document.getElementById('create-task-form').reset();
+                await loadTasks(); 
+                
+                setTimeout(() => messageBox.classList.add('hidden'), 2000);
+            } catch (error) {
+                console.error('Error al crear tarea:', error);
+                messageBox.textContent = `No se pudo crear la tarea. ❌ Detalle: ${error.message}`;
+                messageBox.className = 'message-box error mt-4';
+                messageBox.classList.remove('hidden');
+            }
+        });
+
+        // 🔍 Filtrar tareas por fecha (funcional)
+    
+    
+
+        // 🚀 Cargar tareas al iniciar
+        loadTasks();
+    });
+</script>
+</body>
+</html>

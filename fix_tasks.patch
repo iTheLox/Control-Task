@@ -1,0 +1,184 @@
+*** Begin Patch
+*** Update File: app/models.py
+@@
+-from typing import Optional
++from typing import Optional
+@@
+ class TaskBase(BaseModel):
+@@
+     title: str
+     description: Optional[str] = None
+     completed: bool = False
++    # Fechas opcionales (ISO strings). La BD gestionará created_at por defecto.
++    created_at: Optional[str] = None
++    completed_at: Optional[str] = None
+@@
+ class TaskUpdate(TaskBase):
+@@
+     title: Optional[str] = None
+     description: Optional[str] = None
+     completed: Optional[bool] = None
++    completed_at: Optional[str] = None
+*** End Patch
+
+*** Begin Patch
+*** Update File: app/database.py
+@@
+     task_table_query = """
+     CREATE TABLE IF NOT EXISTS tasks (
+         id INT AUTO_INCREMENT PRIMARY KEY,
+         title VARCHAR(100) NOT NULL,
+         description TEXT,
+         completed BOOLEAN NOT NULL DEFAULT FALSE,
+         owner_id INT NOT NULL,
+-        FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
++        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
++        completed_at DATETIME DEFAULT NULL,
++        FOREIGN KEY (owner_id) REFERENCES users(id) ON DELETE CASCADE
+     )
+     """
+*** End Patch
+
+*** Begin Patch
+*** Update File: app/services/task_service.py
+@@
+ def create_new_task(task: TaskCreate, owner_id: int):
+@@
+-    query = "INSERT INTO tasks (title, description, completed, owner_id) VALUES (%s, %s, %s, %s)"
++    # created_at lo maneja la BD con DEFAULT CURRENT_TIMESTAMP
++    query = "INSERT INTO tasks (title, description, completed, owner_id) VALUES (%s, %s, %s, %s)"
+     params = (task.title, task.description, task.completed, owner_id)
+@@
+ def get_user_tasks(owner_id: int):
+@@
+-    query = "SELECT id, title, description, completed, owner_id FROM tasks WHERE owner_id = %s"
+-    tasks = execute_query(query, (owner_id,), fetch_all=True)
++    query = "SELECT id, title, description, completed, owner_id, created_at, completed_at FROM tasks WHERE owner_id = %s"
++    tasks = execute_query(query, (owner_id,), fetch_all=True)
+@@
+ def get_task_by_id(task_id: int, owner_id: int):
+@@
+-    query = "SELECT id, title, description, completed, owner_id FROM tasks WHERE id = %s AND owner_id = %s"
+-    task = execute_query(query, (task_id, owner_id), fetch_one=True)
++    query = "SELECT id, title, description, completed, owner_id, created_at, completed_at FROM tasks WHERE id = %s AND owner_id = %s"
++    task = execute_query(query, (task_id, owner_id), fetch_one=True)
+     return task
+@@
+ def update_task(task_id: int, owner_id: int, task: TaskUpdate):
+@@
+     if task.title is not None:
+         updates.append("title = %s")
+         params.append(task.title)
+     if task.description is not None:
+         updates.append("description = %s")
+         params.append(task.description)
+-    if task.completed is not None:
+-        updates.append("completed = %s")
+-        params.append(task.completed)
++    if task.completed is not None:
++        updates.append("completed = %s")
++        params.append(task.completed)
++        # Ajustamos completed_at según el estado
++        if task.completed:
++            updates.append("completed_at = NOW()")
++        else:
++            updates.append("completed_at = NULL")
+*** End Patch
+
+*** Begin Patch
+*** Update File: app/routes/task_routes.py
+@@
+-router = APIRouter(prefix="/tasks", tags=["Tasks"])
++router = APIRouter(prefix="/tasks", tags=["Tasks"])
+@@
+-@router.put("/{task_id}")
+-async def edit_task(task_id: int, task: TaskUpdate, current_user=Depends(get_current_user)):
+-    updated = update_task(task_id, current_user["id"], task)
++@router.patch("/{task_id}")
++async def edit_task(task_id: int, task: TaskUpdate, current_user=Depends(get_current_user)):
++    updated = update_task(task_id, current_user["id"], task)
+     if not updated:
+         raise HTTPException(status_code=404, detail="Tarea no encontrada o no pertenece al usuario.")
+     return {"message": "Tarea actualizada correctamente."}
+*** End Patch
+
+*** Begin Patch
+*** Update File: tasks.html
+@@
+-    async function completeTask(taskId, isCompleted) {
++    async function completeTask(taskId, isCompleted) {
+         const token = localStorage.getItem('access_token');
+         const endpoint = `${API_URL}/${taskId}`;
+-        
+-        const body = {
+-            is_completed: isCompleted,
+-            // Envía la fecha actual en formato YYYY-MM-DD o null
+-            completed_at: isCompleted ? new Date().toISOString().slice(0, 10) : null 
+-        };
+-
+-        try {
+-            const response = await fetch(endpoint, {
+-                method: 'PUT',
+-                headers: {
+-                    'Content-Type': 'application/json',
+-                    'Authorization': `Bearer ${token}`
+-                },
+-                body: JSON.stringify(body)
+-            });
++        // Enviar PATCH con el campo 'completed' que el backend espera
++        const body = { completed: isCompleted };
++
++        try {
++            const response = await fetch(endpoint, {
++                method: 'PATCH',
++                headers: {
++                    'Content-Type': 'application/json',
++                    'Authorization': `Bearer ${token}`
++                },
++                body: JSON.stringify(body)
++            });
+@@
+-            let actionButtons = '';
+-            if (task.is_completed) {
++            let actionButtons = '';
++            if (task.completed) {
+                 actionButtons = `
+                     <button class="btn btn-secondary complete-btn" data-id="${task.id}" data-completed="false">
+                         Desmarcar
+                     </button>
+                     <button class="btn btn-danger delete-btn" data-id="${task.id}">
+                         Eliminar
+                     </button>
+                 `;
+             } else {
+                 actionButtons = `
+                     <button class="btn btn-primary btn-complete complete-btn" data-id="${task.id}" data-completed="true">
+                         Completar
+                     </button>
+                     <button class="btn btn-action edit-btn" 
+                         data-id="${task.id}" 
+                         data-title="${task.title}" 
+                         data-description="${task.description || ''}">
+                         Editar
+                     </button>
+                     <button class="btn btn-danger delete-btn" data-id="${task.id}">
+                         Eliminar
+                     </button>
+                 `;
+             }
+@@
+-            const createdDateStr = parseDate(task.created_at);
+-            const completedDateHtml = task.is_completed && task.completed_at 
++            const createdDateStr = parseDate(task.created_at);
++            const completedDateHtml = task.completed && task.completed_at 
+                 ? `<span class="task-date-completed">Completada: ${parseDate(task.completed_at)}</span>` 
+                 : '';
+@@
+-                const pendingTasks = allTasks.filter(task => !task.is_completed);
+-                const completedTasks = allTasks
+-                    .filter(task => task.is_completed)
++                const pendingTasks = allTasks.filter(task => !task.completed);
++                const completedTasks = allTasks
++                    .filter(task => task.completed)
+                     .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at)); 
+*** End Patch

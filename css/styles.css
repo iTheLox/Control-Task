@@ -1,0 +1,332 @@
+/* -------------------------------------------------------------------------- */
+/* ESTILOS GLOBALES Y VARIABLES                        */
+/* -------------------------------------------------------------------------- */
+:root {
+    --primary-color: #6366f1; /* Indigo 500 */
+    --secondary-color: #f3f4f6; /* Gray 100 */
+    --text-color: #1f2937; /* Gray 900 */
+    --shadow-large: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+}
+
+/* -- Estilos Globales -- */
+body {
+    background-color: var(--secondary-color);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: var(--text-color);
+    line-height: 1.6;
+    margin: 0;
+}
+
+/* -------------------------------------------------------------------------- */
+/* MODIFICACIONES PARA CENTRADO DEL LOGIN              */
+/* -------------------------------------------------------------------------- */
+
+/* 🌟 MODIFICACIÓN CLAVE: Centra el contenido del Body (Usado en index.html) */
+body.centered-body {
+    /* CLAVE 1: Ocupar toda la altura de la ventana */
+    min-height: 100vh;
+    /* CLAVE 2: Usar Flexbox para el centrado perfecto */
+    display: flex;
+    justify-content: center; /* Centra horizontalmente */
+    align-items: center; /* Centra verticalmente */
+    /* El body de tareas (task-body) ya no necesita estas propiedades, pero 
+       lo dejamos si lo usas en ambas páginas */
+}
+
+/* 🌟 NUEVO ESTILO: Contenedor principal del Login (login-wrapper) */
+.login-wrapper {
+    width: 100%;
+    max-width: 400px; /* Limita el ancho del formulario para que sea compacto y moderno */
+    padding: 20px;
+    box-sizing: border-box; 
+    /* El centrado del login-wrapper lo maneja body.centered-body */
+}
+
+/* 🌟 NUEVO ESTILO: Estilo de tarjeta para el formulario de Login (login-card) */
+.login-card {
+    background: white;
+    padding: 30px; 
+    border-radius: 12px;
+    box-shadow: var(--shadow-large);
+    margin-bottom: 20px; /* Espacio debajo de la tarjeta para el texto de pie de página */
+}
+
+/* -------------------------------------------------------------------------- */
+/* ESTILOS DE TAREAS (SIN MODIFICACIÓN)                  */
+/* -------------------------------------------------------------------------- */
+body.task-body {
+    /* Si esta clase es usada, anula el centrado del body para que las tareas fluyan normalmente */
+    background-color: var(--secondary-color);
+    line-height: 1.6;
+    margin: 0;
+    min-height: auto;
+    display: block; 
+}
+.task-container {
+    max-width: 900px;
+    margin: 40px auto;
+    padding: 20px;
+}
+/* -- Tarjetas y Contenedores Modernos -- */
+.card, .modern-card {
+    background: white;
+    padding: 24px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-large);
+    margin-bottom: 24px;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+.modern-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.15);
+}
+/* ... (Resto de los estilos de encabezados y tareas) ... */
+.task-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 30px;
+}
+
+.main-title {
+    font-size: 2.5rem;
+    color: var(--primary-color);
+    font-weight: 700;
+    margin: 0;
+}
+.card-subtitle {
+    font-size: 1.5rem;
+    margin-bottom: 15px;
+    color: var(--text-color);
+    font-weight: 600;
+}
+/* -------------------------------------------------------------------------- */
+/* ESTILOS DE FORMULARIO COMUNES               */
+/* -------------------------------------------------------------------------- */
+
+/* -- Botones -- */
+.btn {
+    padding: 10px 18px;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    transition: background-color 0.2s, opacity 0.2s;
+}
+
+.btn-primary { background-color: var(--primary-color); color: white; }
+.btn-secondary { background-color: #9ca3af; color: white; }
+.btn-danger { background-color: #ef4444; color: white; }
+.btn-action { background-color: #3b82f6; color: white; }
+
+.btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+/* -- Formularios y Inputs -- */
+.form-group { margin-bottom: 16px; }
+.form-label { 
+    display: block; 
+    font-weight: 600; 
+    margin-bottom: 5px; 
+    color: var(--primary-color); 
+}
+.form-input {
+    /* 🌟 MODIFICACIÓN: En la página de tareas era 30%, aquí debe ser 100% para el login */
+    width: 100%; 
+    padding: 10px;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-sizing: border-box;
+    transition: border-color 0.2s;
+}
+.form-input:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+
+/* Estilos específicos del login */
+.form-actions {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 25px;
+}
+
+.register-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: color 0.2s;
+}
+
+.footer-text {
+    text-align: center;
+    color: #9ca3af;
+    font-size: 0.85rem;
+}
+
+
+/* -------------------------------------------------------------------------- */
+/* OTROS ESTILOS                               */
+/* -------------------------------------------------------------------------- */
+.filter-form { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
+.filter-group { flex: 1; min-width: 150px; }
+.filter-action { flex-shrink: 0; }
+
+.task-items-container {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+}
+.task-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 15px;
+}
+.task-content { flex-grow: 1; }
+/* ... (Resto de los estilos de listas, modales y mensajes) ... */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background-color: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    width: 100%;
+    max-width: 500px;
+}
+
+.modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.hidden { display: none !important; }
+
+.message-box { 
+    padding: 10px; 
+    border-radius: 6px; 
+    text-align: center; 
+    font-weight: 500;
+    margin-top: 15px;
+}
+.success { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;}
+.error { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
+
+/* -------------------------------------------------------------------------- */
+/* MODULO TASK (REVISADOS)               */
+        :root {
+            --primary-color: #6366f1; /* Indigo 500 */
+            --secondary-color: #f3f4f6; /* Gray 100 */
+            --text-color: #1f2937; /* Gray 900 */
+            --shadow-large: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+        body.task-body {
+            background-color: var(--secondary-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
+            line-height: 1.6;
+            margin: 0;
+        }
+        .task-container { max-width: 900px; margin: 40px auto; padding: 20px; }
+        .card, .modern-card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: var(--shadow-large);
+            margin-bottom: 24px;
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+        .modern-card:hover { transform: translateY(-2px); box-shadow: 0 15px 25px -5px rgba(0, 0, 0, 0.15); }
+        .task-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+        .main-title { font-size: 2.5rem; color: var(--primary-color); font-weight: 700; margin: 0; }
+        .card-subtitle { font-size: 1.5rem; margin-bottom: 15px; color: var(--text-color); font-weight: 600; }
+        .completed-title { color: #10b981; } 
+
+        /* Botones */
+        .btn {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: background-color 0.2s, opacity 0.2s;
+            white-space: nowrap; 
+        }
+        .btn-primary { background-color: var(--primary-color); color: white; }
+        .btn-secondary { background-color: #9ca3af; color: white; }
+        .btn-danger { background-color: #ef4444; color: white; }
+        .btn-action { background-color: #3b82f6; color: white; }
+        .btn-complete { background-color: #10b981; color: white; } 
+        .btn:hover { opacity: 0.9; transform: translateY(-1px); }
+
+        /* Formularios */
+        .form-group { margin-bottom: 15px; }
+        .form-label { display: block; font-weight: 600; margin-bottom: 5px; color: var(--primary-color); }
+        .form-input {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 6px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+        .form-input:focus { border-color: var(--primary-color); outline: none; box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2); }
+        .filter-form { display: flex; flex-wrap: wrap; gap: 15px; align-items: flex-end; }
+        .filter-group { flex: 1; min-width: 150px; }
+        .filter-action { flex-shrink: 0; }
+        .task-items-container { display: flex; flex-direction: column; gap: 15px; }
+
+        /* Listado de Tareas */
+        .task-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+        }
+        .task-content { flex-grow: 1; }
+        .task-content .task-title { font-size: 1.25rem; color: var(--text-color); font-weight: 700; margin: 0; }
+        .task-content .task-description { color: #6b7280; margin: 5px 0 0; font-size: 0.95rem; }
+        .task-dates {
+            display: block;
+            font-size: 0.8rem;
+            color: #9ca3af;
+            margin-top: 5px;
+        }
+        .task-date-completed { font-weight: 600; color: #10b981; margin-left: 10px;}
+        .task-date-created { color: #6b7280; }
+
+        /* Tarea Completada (Estilo visual) */
+        .completed-task .task-title { text-decoration: line-through; color: #9ca3af; }
+        .completed-task .task-description { text-decoration: line-through; }
+        .completed-task { opacity: 0.8; border-left: 5px solid #10b981; }
+
+        .task-actions { display: flex; gap: 10px; margin-left: 15px; }
+
+        /* Modal */
+        .modal-backdrop {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.6);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content { width: 100%; max-width: 500px; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .hidden { display: none !important; }
+
+        /* Mensajes */
+        .message-box { padding: 10px; border-radius: 6px; text-align: center; font-weight: 500; margin-top: 15px;}
+        .success { background-color: #d1fae5; color: #065f46; border: 1px solid #a7f3d0;}
+        .error { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Crear Cuenta</title>
+  <!-- Enlaza tu archivo CSS personalizado aquí -->
+  <link rel="stylesheet" href="./css/styles.css"> 
+</head>
+<!-- Reemplaza las clases de utilidad por 'centered-body' -->
+<body class="centered-body">
+  <!-- Reemplaza las clases de utilidad por 'login-wrapper' -->
+  <div class="login-wrapper">
+    <!-- Reemplaza las clases de utilidad por 'login-card' -->
+    <div class="login-card">
+      <!-- Clase 'card-title' para el encabezado principal -->
+      <h1 class="card-title">Crear Cuenta</h1>
+      
+      <form id="register-form">
+        <!-- Clase 'form-group' y 'mb-4' para espaciado -->
+        <div class="form-group mb-4">
+          <!-- Clase 'form-label' para la etiqueta -->
+          <label for="username" class="form-label">Nombre de Usuario</label>
+          <!-- Clase 'form-input' para el campo de texto -->
+          <input type="text" id="username" required class="form-input"/>
+        </div>
+
+        <div class="form-group mb-4">
+          <label for="email" class="form-label">Correo Electrónico</label>
+          <input type="email" id="email" required class="form-input"/>
+        </div>
+
+        <div class="form-group mb-6">
+          <label for="password" class="form-label">Contraseña</label>
+          <input type="password" id="password" required class="form-input"/>
+        </div>
+
+        <!-- Clase 'message-box hidden' para el mensaje de estado -->
+        <p id="message" class="message-box hidden"></p>
+
+        <!-- Clase 'btn btn-primary' para el botón principal -->
+        <button type="submit" class="btn btn-primary">Registrarse</button>
+
+        <!-- Usamos una clase simple para el texto auxiliar, y 'register-link' para el enlace -->
+        <p class="auxiliary-text">
+          ¿Ya tienes cuenta? <a href="index.html" class="register-link">Inicia Sesión</a>
+        </p>
+      </form>
+    </div>
+  </div>
+  <script>
+    document.getElementById('register-form').addEventListener('submit', async function(event) {
+      event.preventDefault();
+
+      const payload = {
+        username: document.getElementById('username').value,
+        email: document.getElementById('email').value,
+        password: document.getElementById('password').value
+      };
+
+      const messageElement = document.getElementById('message');
+      messageElement.classList.add('hidden');
+      messageElement.textContent = '';
+
+      try {
+        const response = await fetch('http://localhost:8000/register', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+          messageElement.textContent = '¡Registro exitoso! Redirigiendo...';
+          messageElement.classList.remove('text-red-500');
+          messageElement.classList.add('text-green-500', 'block');
+          setTimeout(() => {
+            window.location.href = 'index.html';
+          }, 1500);
+        } else {
+          messageElement.textContent = data.detail || 'Error al registrar.';
+          messageElement.classList.remove('text-green-500');
+          messageElement.classList.add('text-red-500', 'block');
+        }
+      } catch (error) {
+        console.error('Error de red:', error);
+        messageElement.textContent = 'No se pudo conectar con el servidor.';
+        messageElement.classList.remove('text-green-500');
+        messageElement.classList.add('text-red-500', 'block');
+      }
+    });
+  </script>
+</body>
+</html>

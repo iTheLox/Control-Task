@@ -1,0 +1,6 @@
+venv/
+.git/
+.gitignore
+__pycache__/
+*.pyc
+.env # Por seguridad, aunque se usa en compose, es mejor no incluirlo en la imagen final

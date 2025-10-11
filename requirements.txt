@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+# Driver para MySQL. Usaremos el oficial de Oracle.
+mysql-connector-python
+# Para la autenticación
+python-jose[cryptography]
+passlib[bcrypt]
+# Para cargar las variables de entorno localmente
+python-dotenv
+# Para los modelos de datos
+pydantic
+python-multipart
+email-validator 
+bcrypt==3.2.0

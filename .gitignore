@@ -1,0 +1,14 @@
+# Directorios de entornos virtuales
+venv/
+.venv/
+__pycache__/
+
+# Archivos de configuración y logs
+.env
+*.log
+*.sqlite3
+
+# Archivos específicos de Python
+*.pyc
+/dist
+/build

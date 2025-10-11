@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  # Servicio de Base de Datos MySQL
+  db:
+    image: mysql:8.0-debian        # Imagen ligera y estable de MySQL
+    container_name: task_db_mysql
+    restart: always
+    env_file:
+      - .env                      # Carga las variables de MySQL desde .env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    volumes:
+      - task_data:/var/lib/mysql  # Persistencia de datos
+    ports:
+      - "3307:3306"               # Para acceder desde el host si es necesario
+
+  # Servicio de Backend FastAPI
+  backend:
+    build: .                      # Construye la imagen usando el Dockerfile en este directorio
+    container_name: task_backend_fastapi
+    restart: always
+    env_file:
+      - .env                      # Carga las variables de entorno
+    ports:
+      - "${BACKEND_PORT}:8000"    # Mapea el puerto del contenedor al puerto del host
+    depends_on:
+      - db                        # Asegura que la DB se inicie antes que el backend
+    # Comando para esperar que la DB esté lista (opcional, pero recomendado)
+    command: ["/bin/bash", "-c", "sleep 20 && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+
+volumes:
+  task_data:

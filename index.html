@@ -1,0 +1,96 @@
+
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gestión de Tareas - Login</title>
+    <!-- Aquí debes enlazar tu archivo CSS personalizado -->
+    <link rel="stylesheet" href="./css/styles.css"> 
+</head>
+<body class="centered-body">
+    <div class="login-wrapper">
+        <div class="login-card">
+            <h1 class="card-title">Iniciar Sesión</h1>
+            
+            <form id="login-form">
+                <div class="form-group mb-4">
+                    <label class="form-label" for="username">
+                        Nombre de Usuario
+                    </label>
+                    <input class="form-input" id="username" type="text" placeholder="Tu nombre de usuario" required>
+                </div>
+
+                <div class="form-group mb-6">
+                    <label class="form-label" for="password">
+                        Contraseña
+                    </label>
+                    <input class="form-input" id="password" type="password" placeholder="**************" required>
+                </div>
+                
+                <!-- La clase 'hidden' debe ser definida en tu CSS para ocultarlo por defecto -->
+                <p id="message" class="message-box hidden"></p>
+
+                <div class="form-actions">
+                    <button class="btn btn-primary" type="submit">
+                        Acceder
+                    </button>
+                    <a class="register-link" href="register.html">
+                        ¿No tienes cuenta? Regístrate
+                    </a>
+                </div>
+            </form>
+        </div>
+        <p class="footer-text">
+            &copy;2023 Task Manager. Todos los derechos reservados.
+        </p>
+    </div>
+
+    <script>
+        document.getElementById('login-form').addEventListener('submit', async function(event) {
+            event.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const messageElement = document.getElementById('message');
+            messageElement.classList.add('hidden'); // Ocultar mensaje anterior
+            messageElement.textContent = '';
+
+            // La API de FastAPI espera un formato x-www-form-urlencoded para el endpoint /token
+            const formBody = new URLSearchParams();
+            formBody.append('username', username);
+            formBody.append('password', password);
+
+            try {
+                const response = await fetch('http://localhost:8000/token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    },
+                    body: formBody.toString()
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    // Login exitoso: Almacena el token y redirige
+                    localStorage.setItem('access_token', data.access_token);
+                    messageElement.textContent = '¡Inicio de sesión exitoso! Redirigiendo...';
+                    messageElement.classList.remove('text-red-500');
+                    messageElement.classList.add('text-green-500', 'block');
+                    window.location.href = 'tasks.html'; // Redirige a la página de tareas
+                } else {
+                    // Error de credenciales o del servidor
+                    messageElement.textContent = data.detail || 'Error desconocido al iniciar sesión.';
+                    messageElement.classList.remove('text-green-500');
+                    messageElement.classList.add('text-red-500', 'block');
+                }
+            } catch (error) {
+                console.error('Error de red:', error);
+                messageElement.textContent = 'Error de conexión con el servidor.';
+                messageElement.classList.remove('text-green-500');
+                messageElement.classList.add('text-red-500', 'block');
+            }
+        });
+    </script>
+</body>
+</html>
