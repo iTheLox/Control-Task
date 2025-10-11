@@ -51,28 +51,37 @@ def get_user_by_email(email: str):
     user_data = execute_query(query, (email,), fetch_one=True)
     return user_data
 
-def create_user(user: UserCreate):
+def create_user_record(username: str, email: str, hashed_password: str) -> bool:
     """
-    Propósito: Insertar un nuevo usuario en la base de datos con su contraseña hasheada.
+    Propósito: Insertar un nuevo usuario en la base de datos usando valores ya procesados.
     Parámetros de entrada:
-        - user (UserCreate): Modelo Pydantic con username, email y password.
-    Qué retorna: El ID del nuevo usuario si se insertó con éxito, o None.
+        - username (str): Nombre de usuario.
+        - email (str): Correo electrónico.
+        - hashed_password (str): Contraseña ya hasheada.
+    Qué retorna: True si el usuario fue creado con éxito, False en caso contrario.
     """
-    if get_user_by_username(user.username) or get_user_by_email(user.email):
+    if get_user_by_username(username) or get_user_by_email(email):
         logger.warning(f"Intento de registro fallido: Usuario o email ya existen.")
-        return None # Usuario o email ya existen
+        return False # Usuario o email ya existen
 
-    hashed_password = get_password_hash(user.password)
-    
     query = "INSERT INTO users (username, email, hashed_password) VALUES (%s, %s, %s)"
-    params = (user.username, user.email, hashed_password)
-    
+    params = (username, email, hashed_password)
+
     # execute_query retorna el lastrowid para un INSERT exitoso
-    new_user_id = execute_query(query, params) 
-    
+    new_user_id = execute_query(query, params)
+
     if new_user_id:
-        logger.info(f"Usuario {user.username} registrado con éxito con ID: {new_user_id}")
+        logger.info(f"Usuario {username} registrado con éxito con ID: {new_user_id}")
+        return True
     else:
-        logger.error(f"Fallo al registrar el usuario {user.username} en la base de datos.")
-        
-    return new_user_id
+        logger.error(f"Fallo al registrar el usuario {username} en la base de datos.")
+        return False
+
+
+def create_user(user: UserCreate) -> bool:
+    """
+    Wrapper de compatibilidad: recibe `UserCreate`, hashea la contraseña y delega en `create_user_record`.
+    Retorna True/False consistentemente.
+    """
+    hashed_password = get_password_hash(user.password)
+    return create_user_record(user.username, user.email, hashed_password)
