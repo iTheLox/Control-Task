@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 # Configuración de la conexión desde las variables de entorno
 DB_CONFIG = {
-    "host": os.getenv("MYSQL_HOST", "127.0.0.1"), # 'db' en Docker, '127.0.0.1' localmente
+    "host": os.getenv("MYSQL_HOST", "db"), # Por defecto 'db' para Docker; override en .env para entornos locales
     "user": os.getenv("MYSQL_USER"),
     "password": os.getenv("MYSQL_PASSWORD"),
     "database": os.getenv("MYSQL_DATABASE"),
