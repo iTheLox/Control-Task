@@ -37,5 +37,3 @@ Cambios recientes aplicados
 - `.github/copilot-instructions.md` añadido con guías para agentes.
 - `app/services/user_service.py`: `create_user` ahora retorna booleano (True/False) y existe `create_user_record` para uso directo con valores ya hasheados.
 
-Notas finales
-- Si quieres que unifique routers (mover endpoints a `app/routes/` y usar `app.include_router()`), puedo hacerlo; es un refactor seguro pero requiere pruebas.
