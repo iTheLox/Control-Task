@@ -1,4 +1,4 @@
-# Control-Task — Backend FastAPI + MySQL (resumen rápido)
+# Control-Task — Backend FastAPI + MySQL.
 
 Proyecto de ejemplo: backend en FastAPI con persistencia en MySQL y frontend estático (HTML/JS).
 
