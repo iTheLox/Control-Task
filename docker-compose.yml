@@ -1,36 +1,82 @@
-version: '3.8'
-
 services:
-  # Servicio de Base de Datos MySQL
   db:
-    image: mysql:8.0-debian        # Imagen ligera y estable de MySQL
+    image: mysql:8.0-debian
     container_name: task_db_mysql
     restart: always
     env_file:
-      - .env                      # Carga las variables de MySQL desde .env
+      - .env
     environment:
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
     volumes:
-      - task_data:/var/lib/mysql  # Persistencia de datos
+      - task_data:/var/lib/mysql
+      - ./backups/mysql:/backups
     ports:
-      - "3307:3306"               # Para acceder desde el host si es necesario
+      - "3307:3306"
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
 
-  # Servicio de Backend FastAPI
+  redis:
+    image: redis:7-alpine
+    container_name: task_redis
+    restart: always
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   backend:
-    build: .                      # Construye la imagen usando el Dockerfile en este directorio
+    build: .
     container_name: task_backend_fastapi
     restart: always
     env_file:
-      - .env                      # Carga las variables de entorno
+      - .env
     ports:
-      - "${BACKEND_PORT}:8000"    # Mapea el puerto del contenedor al puerto del host
+      - "${BACKEND_PORT}:8000"
     depends_on:
-      - db                        # Asegura que la DB se inicie antes que el backend
-    # Comando para esperar que la DB esté lista (opcional, pero recomendado)
-    command: ["/bin/bash", "-c", "sleep 20 && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: ["/bin/bash", "-c", "sleep 5 && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    networks:
+      - internal_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  celery_worker:
+    build: .
+    container_name: task_celery_worker
+    command: celery -A app.celery_worker.celery worker --loglevel=info
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    networks:
+      - internal_net
 
 volumes:
   task_data:
+
+networks:
+  internal_net:
+    driver: bridge

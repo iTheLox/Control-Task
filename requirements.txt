@@ -12,3 +12,8 @@ pydantic
 python-multipart
 email-validator 
 bcrypt==3.2.0
+
+pandas
+openpyxl
+redis
+celery[redis]

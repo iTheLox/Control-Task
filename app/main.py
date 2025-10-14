@@ -1,23 +1,29 @@
+import os
+import logging
+import redis
 from fastapi import FastAPI, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
 from fastapi.middleware.cors import CORSMiddleware
-from app.database import create_initial_tables
+from app.database import get_db_connection, create_initial_tables
 from app.models import UserCreate, UserDB, TaskCreate, TaskUpdate, TaskDB, Token
 from app.services import user_service, task_service
 from app.auth import get_current_user, create_access_token
-import logging
+from app.routes import upload as upload_router
 
-# 🔧 Inicialización de FastAPI con metadatos
+# ---------------------------------------------------------
+# ⚙️ CONFIGURACIÓN BASE DE LA APLICACIÓN
+# ---------------------------------------------------------
 app = FastAPI(
     title="Task Manager API",
-    description="Backend de gestión de tareas con FastAPI y MySQL",
+    description="Backend de gestión de tareas con FastAPI, MySQL y Celery",
     version="1.0.0"
 )
 
-# 🌐 Configuración de CORS para permitir solicitudes desde el frontend
+# 🌐 Configuración de CORS
 origins = [
     "http://localhost:5500",  # Live Server
-    "null"                    # Si abres el HTML directamente desde el sistema de archivos
+    "http://127.0.0.1:5500",
+    "null"                    # Si abres el HTML directamente desde archivos
 ]
 
 app.add_middleware(
@@ -28,209 +34,169 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 📝 Configuración de logs
+# 📝 Logs
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# ⚙️ Evento de inicio para verificar/crear tablas
+# ---------------------------------------------------------
+# 🚀 EVENTOS DE INICIO
+# ---------------------------------------------------------
 @app.on_event("startup")
 def on_startup():
-    logger.info("Iniciando aplicación. Verificando tablas de MySQL...")
+    """
+    Evento que se ejecuta al iniciar la aplicación.
+    Verifica la conexión y crea las tablas necesarias en MySQL.
+    """
+    logger.info("🔄 Iniciando aplicación... Verificando conexión a MySQL...")
     if not create_initial_tables():
-        logger.error("La aplicación no puede iniciarse debido a fallos de conexión o creación de tablas.")
-    logger.info("Verificación de tablas completada.")
+        logger.error("❌ Error al crear/verificar tablas en MySQL. Revisa tu conexión.")
+    logger.info("✅ Verificación de tablas completada con éxito.")
 
-# 🔐 Endpoint de registro
+
+# ---------------------------------------------------------
+# 🧠 ENDPOINT DE SALUD (HEALTH CHECK)
+# ---------------------------------------------------------
+@app.get("/health")
+def health_check():
+    """
+    Verifica el estado de la conexión a MySQL y Redis.
+    """
+    # MySQL
+    conn = get_db_connection()
+    db_ok = False
+    if conn:
+        try:
+            conn.ping(reconnect=True, attempts=3, delay=1)
+            db_ok = True
+        except:
+            db_ok = False
+        finally:
+            try:
+                conn.close()
+            except:
+                pass
+
+    # Redis
+    redis_ok = False
+    try:
+        REDIS_URL = os.getenv("REDIS_URL", "redis://redis:6379/0")
+        r = redis.from_url(REDIS_URL)
+        if r.ping():
+            redis_ok = True
+    except:
+        redis_ok = False
+
+    status_text = "healthy" if db_ok and redis_ok else "unhealthy"
+    return {"status": status_text, "db": db_ok, "redis": redis_ok}
+
+
+# ---------------------------------------------------------
+# 👤 REGISTRO Y LOGIN DE USUARIOS
+# ---------------------------------------------------------
 @app.post("/register", response_model=UserDB, status_code=status.HTTP_201_CREATED)
 def register_user(user: UserCreate):
     """
-    Propósito: Registrar un nuevo usuario en la aplicación.
-    Parámetros:
-        - user (UserCreate): Modelo con username, email y password.
-    Retorna:
-        - UserDB: Datos del usuario creado (sin el hashed_password).
-    Errores:
-        - 400 si el username o email ya existen.
-        - 500 si ocurre un fallo inesperado al insertar en la base de datos.
+    Registrar un nuevo usuario.
     """
     if user_service.get_user_by_username(user.username) or user_service.get_user_by_email(user.email):
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="El nombre de usuario o email ya está en uso."
-        )
+        raise HTTPException(status_code=400, detail="El nombre de usuario o email ya están en uso.")
 
-    try:
-        created = user_service.create_user(user)
-        if not created:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Fallo al registrar el usuario en la base de datos."
-            )
+    created = user_service.create_user(user)
+    if not created:
+        raise HTTPException(status_code=500, detail="Error al crear el usuario en la base de datos.")
 
-        new_user_data = user_service.get_user_by_username(user.username)
-        return UserDB(**{k: v for k, v in new_user_data.items() if k != 'hashed_password'})
+    new_user_data = user_service.get_user_by_username(user.username)
+    return UserDB(**{k: v for k, v in new_user_data.items() if k != 'hashed_password'})
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error inesperado en register_user: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
 
-# 🔐 Endpoint de login
 @app.post("/token", response_model=Token)
 def login_for_access_token(form_data: OAuth2PasswordRequestForm = Depends()):
     """
-    Propósito: Autenticar a un usuario y devolver un token JWT.
-    Parámetros:
-        - form_data (OAuth2PasswordRequestForm): credenciales (username, password) enviadas por formulario.
-    Retorna:
-        - Token: {access_token, token_type}
-    Errores:
-        - 401 cuando las credenciales son inválidas.
-        - 500 en errores inesperados.
+    Login del usuario y generación de token JWT.
     """
-    try:
-        user_data = user_service.get_user_by_username(form_data.username)
+    user_data = user_service.get_user_by_username(form_data.username)
+    if not user_data or not user_service.verify_password(form_data.password, user_data.get('hashed_password')):
+        raise HTTPException(
+            status_code=401,
+            detail="Nombre de usuario o contraseña incorrectos",
+            headers={"WWW-Authenticate": "Bearer"}
+        )
 
-        if not user_data or not user_service.verify_password(form_data.password, user_data.get('hashed_password')):
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Nombre de usuario o contraseña incorrectos",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+    access_token = create_access_token(data={"sub": user_data['username']})
+    return {"access_token": access_token, "token_type": "bearer"}
 
-        access_token = create_access_token(data={"sub": user_data['username']})
-        return {"access_token": access_token, "token_type": "bearer"}
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error inesperado en login_for_access_token: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
-
-# 👤 Endpoint para obtener el usuario autenticado
 @app.get("/users/me", response_model=UserDB)
 def read_users_me(current_user: UserDB = Depends(get_current_user)):
     """
-    Propósito: Retornar los datos del usuario actualmente autenticado.
-    Parámetros:
-        - current_user (UserDB): Inyectado por la dependencia `get_current_user`.
-    Retorna:
-        - UserDB con los datos del usuario (sin hashed_password).
+    Devuelve los datos del usuario autenticado.
     """
     return current_user
 
-# 📌 Crear tarea
+
+# ---------------------------------------------------------
+# 🧩 CRUD DE TAREAS
+# ---------------------------------------------------------
 @app.post("/tasks", response_model=TaskDB, status_code=status.HTTP_201_CREATED)
 def create_task_for_current_user(task: TaskCreate, current_user: UserDB = Depends(get_current_user)):
     """
-    Propósito: Crear una nueva tarea asociada al usuario autenticado.
-    Parámetros:
-        - task (TaskCreate): Datos de la tarea a crear.
-        - current_user (UserDB): Usuario autenticado (por dependencia).
-    Retorna:
-        - TaskDB: tarea creada.
-    Errores:
-        - 500 en caso de fallo en la base de datos.
+    Crear una nueva tarea para el usuario autenticado.
     """
-    try:
-        new_id = task_service.create_new_task(task, current_user.id)
-        if new_id is None:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Fallo al crear la tarea en la base de datos."
-            )
-        created_task_data = task_service.get_task_by_id(new_id, current_user.id)
-        return TaskDB(**created_task_data)
+    new_id = task_service.create_new_task(task, current_user.id)
+    if new_id is None:
+        raise HTTPException(status_code=500, detail="Error al crear la tarea.")
+    created_task_data = task_service.get_task_by_id(new_id, current_user.id)
+    return TaskDB(**created_task_data)
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error inesperado en create_task_for_current_user: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
 
-# 📌 Leer tareas
 @app.get("/tasks", response_model=list[TaskDB])
 def read_tasks(current_user: UserDB = Depends(get_current_user)):
     """
-    Propósito: Obtener la lista de tareas del usuario autenticado.
-    Parámetros:
-        - current_user (UserDB): Usuario autenticado.
-    Retorna:
-        - list[TaskDB]: Lista de tareas del usuario.
+    Listar tareas del usuario autenticado.
     """
-    try:
-        tasks_data = task_service.get_user_tasks(current_user.id)
-        return [TaskDB(**task) for task in tasks_data]
-    except Exception as e:
-        logger.exception("Error inesperado en read_tasks: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
+    tasks_data = task_service.get_user_tasks(current_user.id)
+    return [TaskDB(**task) for task in tasks_data]
 
-# 📌 Actualizar tarea
+
 @app.patch("/tasks/{task_id}", response_model=TaskDB)
-def update_task_endpoint(task_id: int, task: TaskUpdate, current_user: UserDB = Depends(get_current_user)):
+def update_task(task_id: int, task: TaskUpdate, current_user: UserDB = Depends(get_current_user)):
     """
-    Propósito: Actualizar una tarea existente del usuario autenticado.
-    Parámetros:
-        - task_id (int): ID de la tarea a actualizar.
-        - task (TaskUpdate): Campos a actualizar.
-        - current_user (UserDB): Usuario autenticado.
-    Retorna:
-        - TaskDB: tarea actualizada.
-    Errores:
-        - 404 si la tarea no existe o no pertenece al usuario.
-        - 500 si la actualización falla.
+    Actualizar una tarea existente.
     """
-    try:
-        if not task_service.get_task_by_id(task_id, current_user.id):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada o no te pertenece.")
-
-        if not task_service.update_task(task_id, current_user.id, task):
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Fallo al actualizar la tarea.")
-
-        updated_task_data = task_service.get_task_by_id(task_id, current_user.id)
-        return TaskDB(**updated_task_data)
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error inesperado en update_task_endpoint: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
+    if not task_service.get_task_by_id(task_id, current_user.id):
+        raise HTTPException(status_code=404, detail="Tarea no encontrada o no te pertenece.")
+    if not task_service.update_task(task_id, current_user.id, task):
+        raise HTTPException(status_code=500, detail="Error al actualizar la tarea.")
+    updated_task_data = task_service.get_task_by_id(task_id, current_user.id)
+    return TaskDB(**updated_task_data)
 
 
-# Compatibilidad: aceptar PUT además de PATCH para clientes que aún usan PUT
-@app.put("/tasks/{task_id}", response_model=TaskDB)
-def update_task_endpoint_put(task_id: int, task: TaskUpdate, current_user: UserDB = Depends(get_current_user)):
-    """
-    Compatibilidad con clientes que envían PUT: delega en la lógica de PATCH.
-    """
-    return update_task_endpoint(task_id, task, current_user)
-
-# 📌 Eliminar tarea
 @app.delete("/tasks/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_task_endpoint(task_id: int, current_user: UserDB = Depends(get_current_user)):
+def delete_task(task_id: int, current_user: UserDB = Depends(get_current_user)):
     """
-    Propósito: Eliminar una tarea del usuario autenticado.
-    Parámetros:
-        - task_id (int): ID de la tarea a eliminar.
-        - current_user (UserDB): Usuario autenticado.
-    Retorna:
-        - 204 No Content si se elimina correctamente.
-    Errores:
-        - 404 si la tarea no existe o no pertenece al usuario.
-        - 500 si la eliminación falla.
+    Eliminar una tarea.
     """
-    try:
-        if not task_service.get_task_by_id(task_id, current_user.id):
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Tarea no encontrada o no te pertenece.")
+    if not task_service.get_task_by_id(task_id, current_user.id):
+        raise HTTPException(status_code=404, detail="Tarea no encontrada o no te pertenece.")
+    if not task_service.delete_task(task_id, current_user.id):
+        raise HTTPException(status_code=500, detail="Error al eliminar la tarea.")
+    return None
 
-        if not task_service.delete_task(task_id, current_user.id):
-            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Fallo al eliminar la tarea.")
+from fastapi.responses import FileResponse
 
-        return None
+@app.get("/")
+def index():
+    return FileResponse("app/static/upload.html")
 
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error inesperado en delete_task_endpoint: %s", e)
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Error interno del servidor")
+# ---------------------------------------------------------
+# 📦 RUTAS DEL CARGADOR MASIVO (EXCEL)
+# ---------------------------------------------------------
+app.include_router(upload_router.router, prefix="/api", tags=["Cargador XLS"])
+
+# ---------------------------------------------------------
+# 🏁 EJECUCIÓN DEL SERVIDOR
+# ---------------------------------------------------------
+# Se ejecuta desde consola con:
+# uvicorn app.main:app --reload
+# y en otra terminal:
+# celery -A app.celery_worker.celery worker --loglevel=info
