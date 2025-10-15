@@ -50,7 +50,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["/bin/bash", "-c", "sleep 5 && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    command: ["/bin/bash", "-c", "sleep 20 && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
     networks:
       - internal_net
     healthcheck:
@@ -58,7 +58,7 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 45s
 
   celery_worker:
     build: .
