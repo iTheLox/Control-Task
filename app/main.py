@@ -56,11 +56,13 @@ def on_startup():
 # ---------------------------------------------------------
 # 🧠 ENDPOINT DE SALUD (HEALTH CHECK)
 # ---------------------------------------------------------
-@app.get("/health")
+@app.get("/health", status_code=status.HTTP_200_OK)
 def health_check():
     """
-    Verifica el estado de la conexión a MySQL y Redis.
+    Endpoint ultra-rápido para que Docker verifique si el servidor Uvicorn/FastAPI está vivo.
+    No realiza conexiones a DB ni Redis para evitar bloqueos y timeouts.
     """
+    return {"status": "ok"} # Solo devuelve un estado OK instantáneo
     # MySQL
     conn = get_db_connection()
     db_ok = False

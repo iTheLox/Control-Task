@@ -50,11 +50,11 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-    command: ["/bin/bash", "-c", "sleep 20 && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+    command: ["/bin/bash", "-c", "sleep 20 && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"]
     networks:
       - internal_net
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health || exit 1"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
       interval: 15s
       timeout: 5s
       retries: 3
@@ -63,7 +63,7 @@ services:
   celery_worker:
     build: .
     container_name: task_celery_worker
-    command: celery -A app.celery_worker.celery worker --loglevel=info
+    command: celery -A app.celery_worker.celery worker --loglevel=info --concurrency=4
     depends_on:
       db:
         condition: service_healthy
