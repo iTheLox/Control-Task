@@ -1,4 +1,9 @@
+version: '3.8'
+
 services:
+  # -----------------------------------------------
+  # 1. BASE DE DATOS (MySQL)
+  # -----------------------------------------------
   db:
     image: mysql:8.0-debian
     container_name: task_db_mysql
@@ -6,24 +11,27 @@ services:
     env_file:
       - .env
     environment:
+      # Variables esenciales para MySQL
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
       MYSQL_DATABASE: ${MYSQL_DATABASE}
       MYSQL_USER: ${MYSQL_USER}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD}
-    volumes:
-      - task_data:/var/lib/mysql
-      - ./backups/mysql:/backups
     ports:
+      # Puerto externo para desarrollo y herramientas de DB
       - "3307:3306"
+    volumes:
+      # Persistencia de datos
+      - task_mysql_data:/var/lib/mysql
     networks:
       - internal_net
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "mysqladmin" ,"ping", "-h", "localhost"]
+      timeout: 20s
       retries: 5
-      start_period: 20s
 
+  # -----------------------------------------------
+  # 2. BROKER DE MENSAJES Y CACHE (Redis)
+  # -----------------------------------------------
   redis:
     image: redis:7-alpine
     container_name: task_redis
@@ -32,51 +40,85 @@ services:
       - internal_net
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-      start_period: 10s
+      interval: 1s
+      timeout: 3s
+      retries: 5
 
+  # -----------------------------------------------
+  # 3. BACKEND (FastAPI - API Pura)
+  # -----------------------------------------------
   backend:
-    build: .
+    build: . # Usa el Dockerfile principal (FastAPI)
     container_name: task_backend_fastapi
     restart: always
     env_file:
       - .env
-    ports:
-      - "${BACKEND_PORT}:8000"
+    # ❌ IMPORTANTE: SE ELIMINA LA SECCIÓN 'ports'.
+    # Este servicio ya NO se expone directamente al host.
+
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
+        
     command: ["/bin/bash", "-c", "sleep 20 && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4"]
     networks:
       - internal_net
     healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health').read()"]
-      interval: 15s
-      timeout: 5s
+      # El healthcheck es crucial para que Nginx sepa cuándo hacer proxy
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
       retries: 3
-      start_period: 45s
+      start_period: 30s
 
+  # -----------------------------------------------
+  # 4. FRONTEND (Nginx - Servidor de Estáticos y Proxy)
+  # -----------------------------------------------
+  frontend:
+    # Usa el nuevo Dockerfile para Nginx
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: task_frontend_nginx
+    restart: always
+    ports:
+      # Puerto de acceso público. Accederás a la app en http://localhost
+      - "8080:80" 
+    networks:
+      - internal_net
+    depends_on:
+      # Nginx necesita que el backend esté disponible para hacer el proxy
+      - backend
+
+  # -----------------------------------------------
+  # 5. WORKER ASÍNCRONO (Celery)
+  # -----------------------------------------------
   celery_worker:
-    build: .
+    build: . # Usa la misma imagen base de Python/FastAPI
     container_name: task_celery_worker
-    command: celery -A app.celery_worker.celery worker --loglevel=info --concurrency=4
+    restart: always
+    env_file:
+      - .env
     depends_on:
       db:
         condition: service_healthy
       redis:
         condition: service_healthy
-    env_file:
-      - .env
+    # Comando para iniciar el worker, apuntando al broker Redis
+    command: celery -A app.celery_worker.celery worker --loglevel=info --concurrency=4
     networks:
       - internal_net
 
+# -----------------------------------------------
+# DEFINICIÓN DE VOLÚMENES Y REDES
+# -----------------------------------------------
 volumes:
-  task_data:
+  # Volumen para persistir los datos de MySQL
+  task_mysql_data:
 
 networks:
+  # Red interna para que los contenedores se comuniquen de forma segura
   internal_net:
-    driver: bridge
+      driver: bridge
